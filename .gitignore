@@ -1,0 +1,7 @@
+data/
+node_modules/
+.devagent/
+dist/
+package-lock.json
+*.tsbuildinfo
+.env

@@ -1,0 +1,37 @@
+{
+  "name": "@agent/cli",
+  "version": "0.1.0",
+  "description": "CLI frontend for the Agent",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "agent": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts --web",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agent/core": "workspace:*",
+    "@agent/web-server": "workspace:*",
+    "undici": "^7.28.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^2.1.0"
+  }
+}

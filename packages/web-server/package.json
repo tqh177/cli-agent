@@ -1,0 +1,35 @@
+{
+  "name": "@agent/web-server",
+  "version": "0.1.0",
+  "description": "Koa-based web chat server for the Agent",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agent/core": "workspace:*",
+    "@koa/bodyparser": "^6.0.0",
+    "@koa/router": "^15.0.0",
+    "koa": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/koa": "^3.0.0",
+    "@types/koa__router": "^12.0.0",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^2.1.0"
+  }
+}

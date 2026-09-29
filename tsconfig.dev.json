@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@agent/core": ["packages/core/src/index.ts"],
+      "@agent/web-server": ["packages/web-server/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/core/src/**/*.ts",
+    "packages/cli/src/**/*.ts",
+    "packages/web-server/src/**/*.ts"
+  ]
+}

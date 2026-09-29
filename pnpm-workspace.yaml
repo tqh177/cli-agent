@@ -1,0 +1,9 @@
+packages:
+  # 存放共享包
+  - 'packages/*'
+allowBuilds:
+  esbuild: true
+catalog:
+  "@types/node": ^22.0.0
+  typescript: ^7.0.0
+minimumReleaseAge: 0
