@@ -93,6 +93,8 @@ export default function AppRoot() {
   const [models, setModels] = useState<string[]>([]);
   const [currentModel, setCurrentModel] = useState('');
   const chatAreaRef = useRef<ChatAreaHandle>(null);
+  // 当前流式请求的 AbortController：终止按钮通过它中止生成
+  const stopControllerRef = useRef<AbortController | null>(null);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -185,7 +187,18 @@ export default function AppRoot() {
       });
     };
 
-    sendMessageStream(
+    let controller: AbortController;
+
+    // 流式结束（完成/终止/出错共用）处理
+    const finishStreaming = () => {
+      // 仅复位当前流：旧流迟到的完成/停止回调不允许误清新流的状态
+      if (stopControllerRef.current !== controller) return;
+      setStreaming(false);
+      stopControllerRef.current = null;
+      loadConversations();
+    };
+
+    controller = sendMessageStream(
       convId,
       content,
       currentModel,
@@ -217,18 +230,34 @@ export default function AppRoot() {
         patchToolCalls();
       },
       () => {
-        setStreaming(false);
-        loadConversations();
+        finishStreaming();
       },
       (msg) => {
         setMessages(prev => [...prev, { role: 'assistant', content: `[错误] ${msg}` }]);
-        setStreaming(false);
+        finishStreaming();
+      },
+      () => {
+        // 用户手动终止：保留已生成的部分回复，不追加错误消息
+        finishStreaming();
       },
     );
+    stopControllerRef.current = controller;
   };
 
   const handleModelChange = (model: string) => {
     setCurrentModel(model);
+  };
+
+  /** 用户点击"停止生成"：中止当前流式请求（服务端 close → AbortSignal → 生成循环停止）。 */
+  const handleStop = () => {
+    const controller = stopControllerRef.current;
+    if (!controller) return;
+    controller.abort();
+    // 立即复位前端流式状态：客户端 abort 后 fetch 抛 AbortError，
+    // sendMessageStream 的 catch 分支会回调 onStopped → finishStreaming 复位（双保险）
+    stopControllerRef.current = null;
+    setStreaming(false);
+    loadConversations();
   };
 
   const handleDeleteMessages = async (displayIndices: number[]) => {
@@ -306,6 +335,7 @@ export default function AppRoot() {
           messages={messages}
           streaming={streaming}
           onSend={handleSend}
+          onStop={handleStop}
           models={models}
           currentModel={currentModel}
           onModelChange={handleModelChange}

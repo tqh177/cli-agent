@@ -7,6 +7,7 @@ interface Props {
   messages: ChatMessage[];
   streaming: boolean;
   onSend: (content: string) => void;
+  onStop?: () => void;
   models: string[];
   currentModel: string;
   onModelChange: (model: string) => void;
@@ -18,7 +19,7 @@ export interface ChatAreaHandle {
 }
 
 const ChatArea = forwardRef<ChatAreaHandle, Props>(function ChatArea(
-  { messages, streaming, onSend, models, currentModel, onModelChange, onDeleteMessages },
+  { messages, streaming, onSend, onStop, models, currentModel, onModelChange, onDeleteMessages },
   ref,
 ) {
   const [input, setInput] = useState('');
@@ -165,6 +166,18 @@ const ChatArea = forwardRef<ChatAreaHandle, Props>(function ChatArea(
                 <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
               </svg>
             </button>
+            {streaming && (
+              <button
+                onClick={onStop}
+                disabled={!streaming}
+                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-ds-border text-ds-text-secondary hover:text-ds-danger hover:border-ds-danger/50 transition-all"
+                title="停止生成"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="5" y="5" width="14" height="14" rx="2"/>
+                </svg>
+              </button>
+            )}
           </div>
           <p className="text-2xs text-ds-text-tertiary text-center mt-2 select-none">
             CLI Agent · AI 生成内容仅供参考

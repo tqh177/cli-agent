@@ -40,6 +40,8 @@ export interface ModelInfo {
   models: string[];
 }
 
+import { parseSSELine } from './sse';
+
 const BASE = '';
 
 export async function fetchConversations(): Promise<ConversationItem[]> {
@@ -97,6 +99,7 @@ export function sendMessageStream(
   onToolResult: (name: string, result: string) => void,
   onDone: () => void,
   onError: (msg: string) => void,
+  onStopped?: () => void,
 ): AbortController {
   const controller = new AbortController();
 
@@ -138,40 +141,46 @@ export function sendMessageStream(
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            switch (data.type) {
-              case 'token':
-                onToken(data.token);
-                break;
-              case 'tool_call':
-                onToolCall(data.name, data.arguments);
-                break;
-              case 'tool_result':
-                onToolResult(data.name, data.result);
-                break;
-              case 'done':
-                ended = true;
-                onDone();
-                break;
-              case 'error':
-                ended = true;
-                onError(data.message);
-                break;
-            }
-          } catch { /* skip parse errors */ }
+          const msg = parseSSELine(line);
+          if (!msg) continue;
+          switch (msg.type) {
+            case 'token':
+              onToken(msg.token);
+              break;
+            case 'tool_call':
+              onToolCall(msg.name, msg.arguments);
+              break;
+            case 'tool_result':
+              onToolResult(msg.name, msg.result);
+              break;
+            case 'done':
+              ended = true;
+              onDone();
+              break;
+            case 'stopped':
+              ended = true;
+              onStopped?.();
+              break;
+            case 'error':
+              ended = true;
+              onError(msg.message);
+              break;
+          }
         }
       }
 
-      // 流结束但未收到 done，视为异常终止
-      if (!ended) {
+      // 流结束但未收到 done/stopped，视为异常终止（客户端主动 Abort 除外）
+      if (!ended && !controller.signal.aborted) {
         onError('连接中断，未收到完整回复');
       }
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        onError((err as Error).message);
+      // 客户端主动中止（点击"停止生成"）：fetch/read 抛 AbortError，
+      // 此时连接已断开无法再收到服务端事件，须回调 onStopped 复位流式状态
+      if ((err as Error).name === 'AbortError') {
+        onStopped?.();
+        return;
       }
+      onError((err as Error).message);
     }
   })();
 
