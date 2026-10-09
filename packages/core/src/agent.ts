@@ -52,7 +52,7 @@ export interface RunTaskOptions {
 
 export interface AgentSDK {
   start(conversation?: Conversation): Conversation;
-  sendMessage(conv: Conversation, userInput: string, model?: string): Promise<{ conv: Conversation; reply: string }>;
+  reply(conv: Conversation, userInput: string,model?: string, options?: RunTaskOptions): Promise<{ conv: Conversation; reply: string }>;
   streamReply(conv: Conversation, userInput: string, model?: string): AsyncIterable<string>;
   saveSession(conv?: Conversation): Promise<void>;
   loadSession(id: string): Promise<Conversation>;
@@ -113,20 +113,6 @@ export class DefaultAgent implements AgentSDK {
 
   getCurrentConversation(): Conversation {
     return this.current;
-  }
-
-  async sendMessage(
-    conv: Conversation,
-    userInput: string,
-    model?: string,
-  ): Promise<{ conv: Conversation; reply: string }> {
-    if (!isValidInput(userInput)) throw new AgentError(INVALID_INPUT_MESSAGE);
-
-    const withUser = appendMessage(conv, { role: 'user', content: userInput });
-    const activeProvider = this.resolveProvider(model);
-    const result = await this.runLoop(withUser, activeProvider, MAX_TOOL_ROUNDS);
-    this.current = result.conv;
-    return result;
   }
 
   streamReply(conv: Conversation, userInput: string, model?: string): AsyncIterable<string> {
@@ -215,7 +201,7 @@ export class DefaultAgent implements AgentSDK {
    * @param model 可选，指定本次使用的模型（provider 为 ProviderManager 时生效）
    * @param options 覆盖最大轮数 / system 提示词
    */
-  async runTask(
+  async reply(
     conv: Conversation,
     userInput: string,
     model?: string,
@@ -245,10 +231,10 @@ export class DefaultAgent implements AgentSDK {
     maxRounds: number,
     allowedTools?: string[],
   ): Promise<{ conv: Conversation; reply: string }> {
+    const allowSet = new Set(allowedTools);
     let currentConv = conv;
     let tools = this.toolRegistry.getDefinitions();
     if (allowedTools && allowedTools.length > 0) {
-      const allowSet = new Set(allowedTools);
       tools = tools.filter((t) => allowSet.has(t.function.name));
     }
 
@@ -263,6 +249,14 @@ export class DefaultAgent implements AgentSDK {
         });
 
         for (const tc of result.toolCalls) {
+          if (!allowSet.has(tc.function.name)) {
+            currentConv = appendMessage(currentConv, {
+              role: 'tool',
+              content: "未知工具:" + tc.function.name,
+              tool_call_id: tc.id,
+            });
+            continue;
+          }
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(tc.function.arguments) as Record<string, unknown>;

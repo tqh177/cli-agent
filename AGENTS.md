@@ -9,6 +9,7 @@
 > - 2026-09-18：baseUrl 支持 `{model}` 占位符 — 同一提供商下不同模型可指向不同端点（按模型 ID 展开模板）；deepseek-flash/pro/qwen 合并为 `openllm` 提供商
 > - 2026-09-20：子 Agent 方案 A — `agent.ts` 重构出公共 `runTask`（独立会话执行工具循环，不污染主会话，支持 `maxRounds`/`systemPrompt`/`allowedTools`）；新增 `tools/subagent-tool.ts` 的 `createSubAgentTool` 工厂，将子 Agent 包装为普通 Tool，默认只读工具白名单，结果 JSON 化返回并截断
 > - 2026-09-20：多 Agent 声明式配置 — `agent.config.json` 增加 `subagents` 数组，CLI 启动时自动为每个条目注册 `run_subagent_<name>` 工具（`cli/src/index.ts` 的 `registerSubAgents`），复用父 agent + `runTask.allowedTools` 收窄工具集；清理 core/dist 历史 `subagent/` 残留（含 `resolveSubAgentConfig` 陈旧引用）
+> - 2026-09-30：子 Agent 配置文件化 — 将 `agent.config.json` 中的 `subagents` 数组迁移到 `.agent/subagent/*.md` 文件；每个 MD 文件使用 YAML frontmatter（name/description/model/tools/maxRounds/maxResultLength）+ Markdown 正文（systemPrompt）；新增 `cli/src/subagent-config.ts` 的 `loadSubAgentConfigsFromDir` 加载器（基于 `gray-matter`）；`config.ts` 中 JSON subagents 字段弃用（有则警告）
 
 ---
 

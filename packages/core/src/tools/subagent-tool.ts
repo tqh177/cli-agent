@@ -12,7 +12,7 @@
  * - 返回给主 Agent 的只是子任务结论（reply），中间过程不外泄（不回填主会话）。
  */
 
-import { DefaultAgent } from '../agent.js';
+import { AgentSDK, DefaultAgent } from '../agent.js';
 import { createConversation } from '../models/message.js';
 import { Tool, ToolDef } from './tool-registry.js';
 
@@ -37,7 +37,7 @@ export interface SubAgentToolOptions {
   /** 子 Agent 专属 system prompt（角色、目标、输出格式、安全约束）。 */
   systemPrompt: string;
   /** 执行子任务的 Agent（复用其 provider / runTask / 存储）。 */
-  agent: DefaultAgent;
+  agent: AgentSDK;
   /** 可选，指定子 Agent 使用的模型（provider 为 ProviderManager 时生效）。 */
   model?: string;
   /** 可选，子 Agent 最大工具轮数（默认 20，防止失控）。 */
@@ -48,13 +48,11 @@ export interface SubAgentToolOptions {
   maxResultLength?: number;
 }
 
-/** 子 Agent 默认允许的工具（只读，无副作用）。 */
-export const DEFAULT_SUBAGENT_TOOLS = ['read_file', 'grep', 'glob'] as const;
-
 /**
- * 声明式子 Agent 配置（来自 agent.config.json 的 `subagents` 字段）。
- * 启动时由 CLI 装配：为每个条目创建一个独立 DefaultAgent（独立 ToolRegistry
- * 与工具白名单），并注册为 `run_subagent_<name>` 工具。
+ * 声明式子 Agent 配置（来自 .agent/subagent/*.md 文件的 YAML frontmatter）。
+ * 每个 .md 文件的 frontmatter 提供元数据（name/description/model/tools 等），
+ * 文件正文作为 systemPrompt。启动时由 CLI 装配：为每个条目创建
+ * createSubAgentTool 工具并注册为 `run_subagent_<name>`。
  */
 export interface SubAgentConfig {
   /** 工具唯一名（LLM 调用名），注册为 run_subagent_<name>。 */
@@ -130,11 +128,11 @@ export function createSubAgentTool(options: SubAgentToolOptions): Tool {
       try {
         // 每次调用都是独立上下文；runTask 不会修改 parent 的 this.current。
         const conv = createConversation();
-        const result = await agent.runTask(conv, task, model, {
+        const result = await agent.reply(conv, task, model, {
           systemPrompt,
           maxRounds,
           // 默认只读工具；未指定时也强制限制在该白名单（防止子 Agent 越权）。
-          allowedTools: allowedTools ?? [...DEFAULT_SUBAGENT_TOOLS],
+          allowedTools: allowedTools,
         });
         const reply =
           result.reply.length > maxResultLength

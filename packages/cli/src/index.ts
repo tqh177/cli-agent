@@ -7,7 +7,7 @@
  */
 
 import { dirname, resolve } from 'node:path';
-import { ConfigError, SessionLoadError, ProviderManager, DefaultAgent, FileSessionStore, ToolRegistry, fileTools, shellTools, webTools, ToolCallbackParams, createConversation, ProviderEntryConfig, createSubAgentTool, DEFAULT_SUBAGENT_TOOLS, SubAgentConfig } from '@agent/core';
+import { ConfigError, SessionLoadError, ProviderManager, DefaultAgent, FileSessionStore, ToolRegistry, fileTools, shellTools, webTools, ToolCallbackParams, createConversation, ProviderEntryConfig, createSubAgentTool, SubAgentConfig, AgentSDK } from '@agent/core';
 import { WebChatServer } from '@agent/web-server';
 import { loadConfig } from './config.js';
 import { loadEnvFile } from './env.js';
@@ -104,7 +104,7 @@ const SUBAGENT_FALLBACK_PROMPT = `你是被主 Agent 委派的子 Agent，只负
  * 用 allowedTools 收窄工具集、不污染父会话），无需额外创建子 agent 实例。
  */
 function registerSubAgents(
-  parentAgent: DefaultAgent,
+  parentAgent: AgentSDK,
   parentRegistry: ToolRegistry,
   configs?: SubAgentConfig[],
 ): void {
@@ -128,7 +128,7 @@ function registerSubAgents(
       agent: parentAgent,
       model: cfg.model,
       maxRounds: cfg.maxRounds,
-      allowedTools: cfg.tools ? [...cfg.tools] : [...DEFAULT_SUBAGENT_TOOLS],
+      allowedTools: cfg.tools,
       maxResultLength: cfg.maxResultLength,
     });
 
@@ -149,7 +149,11 @@ async function main(): Promise<void> {
 
   // 加载配置并组装核心组件（默认读取项目根目录下的 agent.config.json）。
   const configPath = args.configPath ?? resolve(process.cwd(), 'agent.config.json');
-  const config = await loadConfig(configPath, { systemPromptPath: resolve(dirname(configPath), 'system_prompt.md') });
+  const configDir = dirname(configPath);
+  const config = await loadConfig(configPath, {
+    systemPromptPath: resolve(configDir, 'system_prompt.md'),
+    subagentDir: configDir,
+  });
   const store = new FileSessionStore(resolve(config.storage.dir));
 
   // 根据配置过滤并注册工具
@@ -167,12 +171,12 @@ async function main(): Promise<void> {
     store,
     toolRegistry,
     (params: ToolCallbackParams) => {
-    console.log(`\n🔧 工具调用: ${params.toolCall.function.name}`);
-    console.log(`📝 参数: ${params.toolCall.function.arguments}`);
-    // 截断过长的结果
-    const result = params.result;
-    const displayResult = result.length > 200 ? result.substring(0, 200) + '...' : result;
-    console.log(`✅ 结果: ${displayResult}\n`);
+      console.log(`\n🔧 工具调用: ${params.toolCall.function.name}`);
+      console.log(`📝 参数: ${params.toolCall.function.arguments}`);
+      // 截断过长的结果
+      const result = params.result;
+      const displayResult = result.length > 200 ? result.substring(0, 200) + '...' : result;
+      console.log(`✅ 结果: ${displayResult}\n`);
   });
 
   // 按配置装配声明式子 Agent（注册 run_subagent_<name> 工具到主注册表）。

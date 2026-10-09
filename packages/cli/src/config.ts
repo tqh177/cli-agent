@@ -36,6 +36,7 @@ import {
   ToolConfig,
   SubAgentConfig,
 } from '@agent/core';
+import { loadSubAgentConfigsFromDir } from './subagent-config.js';
 
 /** 存储相关的默认配置。 */
 const DEFAULT_STORAGE = {
@@ -61,8 +62,9 @@ export interface AppConfig {
  * @param configPath 可选配置文件路径；未提供时仅使用默认值（必须通过环境变量提供 apiKey）。
  * @param opts 附加选项；systemPromptPath 为 system 提示词文件路径，若文件存在则其内容
  * 作为 systemPrompt（配置文件中的 systemPrompt 字段不再使用）。
+ * subagentDir 为子 Agent 配置基目录，函数会在其下查找 .agent/subagent/*.md 文件。
  */
-export async function loadConfig(configPath?: string, opts?: { systemPromptPath?: string }): Promise<AppConfig> {
+export async function loadConfig(configPath?: string, opts?: { systemPromptPath?: string; subagentDir?: string }): Promise<AppConfig> {
   let fileConfig: Record<string, unknown> = {};
   if (configPath) {
     let raw: string;
@@ -85,7 +87,7 @@ export async function loadConfig(configPath?: string, opts?: { systemPromptPath?
     }
   }
 
-  const config = mergeConfig(fileConfig);
+  const { config, jsonSubagents } = mergeConfig(fileConfig);
 
   // 从 system 提示词文件读取内容（可选）。文件不存在时保持无 systemPrompt。
   const systemPromptPath = opts?.systemPromptPath;
@@ -100,11 +102,28 @@ export async function loadConfig(configPath?: string, opts?: { systemPromptPath?
     }
   }
 
+  // 子 Agent 配置：优先从 .agent/subagent/*.md 文件加载。
+  const subagentDir = opts?.subagentDir;
+  if (subagentDir) {
+    const fileSubagents = await loadSubAgentConfigsFromDir(subagentDir);
+    if (fileSubagents) {
+      config.subagents = fileSubagents;
+    } else if (jsonSubagents) {
+      // .agent/subagent/ 目录不存在或无 .md 文件，回退到 JSON 中的 subagents（弃用）。
+      config.subagents = parseSubAgentConfigs(jsonSubagents);
+      console.warn('[配置] agent.config.json 中的 subagents 字段已弃用，请迁移到 .agent/subagent/*.md 文件');
+    }
+  } else if (jsonSubagents) {
+    // 未指定 subagentDir，回退到 JSON 中的 subagents（弃用）。
+    config.subagents = parseSubAgentConfigs(jsonSubagents);
+    console.warn('[配置] agent.config.json 中的 subagents 字段已弃用，请迁移到 .agent/subagent/*.md 文件');
+  }
+
   return config;
 }
 
-/** 将文件配置与默认值合并，生成最终配置。 */
-function mergeConfig(fileConfig: Record<string, unknown>): AppConfig {
+/** 将文件配置与默认值合并，生成最终配置。同时返回 JSON 中原始的 subagents 数据（由 loadConfig 决定如何加载）。 */
+function mergeConfig(fileConfig: Record<string, unknown>): { config: AppConfig; jsonSubagents: unknown } {
   const providerRaw = fileConfig.provider;
   const storageRaw = (fileConfig.storage as Record<string, unknown> | undefined) ?? {};
   const toolsRaw = fileConfig.tools as Record<string, unknown> | undefined;
@@ -112,11 +131,13 @@ function mergeConfig(fileConfig: Record<string, unknown>): AppConfig {
   const llm = parseProviderMap(providerRaw);
   const llmResolved = resolveProviderMap(llm, process.env);
   return {
-    llm,
-    llmResolved,
-    storage: buildStorage(storageRaw),
-    tools: parseToolConfig(toolsRaw),
-    subagents: parseSubAgentConfigs(fileConfig.subagents),
+    config: {
+      llm,
+      llmResolved,
+      storage: buildStorage(storageRaw),
+      tools: parseToolConfig(toolsRaw),
+    },
+    jsonSubagents: fileConfig.subagents,
   };
 }
 

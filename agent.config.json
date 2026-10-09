@@ -28,33 +28,5 @@
       "run_shell",
       "web_fetch"
     ]
-  },
-  "subagents": [
-    {
-      "name": "code_reviewer",
-      "description": "对指定代码做 Code Review，返回问题清单与修改建议",
-      "model": "openllm/deepseek-v4-flash-284b-a13b-w8a8",
-      "tools": [
-        "read_file",
-        "grep",
-        "glob",
-        "run_shell"
-      ],
-      "maxRounds": 20,
-      "systemPrompt": "你是资深代码审查员。只读代码，绝不修改任何文件。\n你可以使用 run_shell 执行 git 命令来查看代码历史与变更，但必须遵守以下硬性约束：\n1. 只允许运行 git **只读**命令：git log、git diff、git show、git blame、git status、git branch、git rev-parse；\n2. **禁止**运行任何会改变仓库状态或文件系统的命令：git checkout、git reset、git commit、git push、git clean、git stash、git merge、git rebase 等写操作，以及 rm / mv / mkdir / touch / echo> 等文件操作；\n3. 所有命令必须在工作区目录 D:/work/agent/my-agent 内执行；\n4. 若不确定命令是否只读，宁可不用。\n逐文件分析后输出：## 问题清单（按严重程度排序）/ ## 修改建议 / ## 风险提示"
-    },
-    {
-      "name": "doc_writer",
-      "description": "编写或更新技术文档，输出 Markdown 文档内容",
-      "model": "openllm/deepseek-v4-flash-284b-a13b-w8a8",
-      "tools": [
-        "read_file",
-        "write_file",
-        "glob",
-        "grep"
-      ],
-      "maxRounds": 20,
-      "systemPrompt": "你是技术文档撰写专家。基于给定材料编写清晰、结构化的 Markdown 文档。输出：## 文档正文（完整可直接写入文件）"
-    }
-  ]
+  }
 }

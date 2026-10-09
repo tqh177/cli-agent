@@ -6,6 +6,5 @@ export { webTools } from './web-tools.js';
 export {
   createSubAgentTool,
   subAgentToolDefinition,
-  DEFAULT_SUBAGENT_TOOLS,
 } from './subagent-tool.js';
 export type { SubAgentResult, SubAgentToolOptions, SubAgentConfig } from './subagent-tool.js';

@@ -26,8 +26,9 @@
   "dependencies": {
     "@agent/core": "workspace:*",
     "@agent/web-server": "workspace:*",
-    "undici": "^7.28.0",
-    "tsx": "^4.23.15"
+    "gray-matter": "^4.0.3",
+    "tsx": "^4.23.15",
+    "undici": "^7.28.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
