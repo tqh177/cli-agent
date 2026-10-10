@@ -150,6 +150,9 @@ export async function runRepl(deps: REPLDeps): Promise<void> {
       // 回复结束后保存会话。
       await agent.saveSession();
     } catch (error) {
+      // 报错也保存会话：streamReply 的 catch 已把已累积消息写入 agent.current，
+      // 此处落盘避免报错导致本轮记录丢失
+      await agent.saveSession().catch(() => { /* 保存失败不掩盖原始错误 */ });
       const message = error instanceof Error ? error.message : String(error);
       out('');
       out(`[错误] ${message}`);

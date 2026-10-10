@@ -183,6 +183,12 @@ export class WebChatServer {
 
         sendEvent('done', { type: 'done', conversationId: convId });
       } catch (err) {
+        // 错误时也保存会话：core 的 streamReply 在 catch 中已把已累积消息
+        // 写入 agent.current，这里落盘避免报错丢失本轮记录
+        const partialConv = agent.getConversation();
+        if (partialConv) {
+          await store.saveSession(partialConv).catch(() => { /* 保存失败不掩盖原始错误 */ });
+        }
         sendEvent('error', {
           type: 'error',
           message: err instanceof Error ? err.message : 'Internal error',

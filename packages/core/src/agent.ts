@@ -123,9 +123,10 @@ export class DefaultAgent implements AgentSDK {
     const self = this;
 
     return (async function* (): AsyncGenerator<string> {
+      // currentConv 提升到 try 外，catch 中也能访问，用于错误时部分保存会话
+      let currentConv = withUser;
       try {
         const tools = self.toolRegistry.getDefinitions();
-        let currentConv = withUser;
 
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           let hasToolCalls = false;
@@ -181,6 +182,9 @@ export class DefaultAgent implements AgentSDK {
 
         throw new AgentError(`工具调用超过最大轮数（${MAX_TOOL_ROUNDS}），可能陷入循环`);
       } catch (error) {
+        // 错误时部分保存会话：已累积的消息（含本轮 user 输入与已完成的轮次）
+        // 不因 LLM/工具错误而丢失，便于用户恢复上下文重试
+        self.current = currentConv;
         if (error instanceof AgentError) {
           throw error;
         }

@@ -2,31 +2,65 @@
  * 文件操作工具：read_file、write_file、edit_file、glob、grep。
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve, relative, sep } from 'node:path';
-import { glob as globRaw } from 'node:fs/promises';
+import { readFile, writeFile, realpath, glob } from 'node:fs/promises';
+import { resolve, relative, sep, isAbsolute, dirname, basename, join } from 'node:path';
 import { Tool } from './tool-registry.js';
 
-/** Node 22 fs.glob 的类型兼容声明。 */
-interface GlobEntry {
-  path: string;
+const WORKSPACE_ROOT = resolve(process.cwd());
+
+/** 缓存工作区根目录的真实路径（解析软链接后），避免 cwd 自身是软链接导致误判。 */
+let realWorkspaceRootPromise: Promise<string> | null = null;
+function getRealWorkspaceRoot(): Promise<string> {
+  if (!realWorkspaceRootPromise) {
+    realWorkspaceRootPromise = realpathSafe(WORKSPACE_ROOT);
+  }
+  return realWorkspaceRootPromise;
 }
-type GlobResult = string | GlobEntry;
 
-function glob(pattern: string | string[], options?: { cwd?: string; exclude?: (path: string) => boolean }): AsyncIterable<GlobResult> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (globRaw as unknown as (p: string | string[], opts?: Record<string, unknown>) => AsyncIterable<GlobResult>)(pattern, options as Record<string, unknown>);
+/**
+ * 解析真实路径（连同符号链接）。对尚不存在的路径（如待写入的新文件），
+ * 回溯到最近的已存在祖先目录做真实化，再拼回剩余部分。
+ */
+async function realpathSafe(target: string): Promise<string> {
+  try {
+    return await realpath(target);
+  } catch {
+    const parent = dirname(target);
+    if (parent === target) return target;
+    return join(await realpathSafe(parent), basename(target));
+  }
 }
 
-const WORKSPACE_ROOT = process.cwd();
+/** 判断 target 是否位于 root 之内（含 root 本身）。 */
+function isInside(root: string, target: string): boolean {
+  const rel = relative(root, target);
+  // rel === ''           -> 即 root 本身
+  // isAbsolute(rel)      -> 跨盘符（Windows 下 relative 返回绝对路径）
+  // '..' / '..'+sep      -> 逃逸到上层目录（精确匹配，避免误伤 "..config" 等）
+  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`));
+}
 
-function safePath(userPath: string): string {
+/**
+ * 将用户提供的路径解析为工作区内的绝对路径，并做边界校验。
+ * 会同时校验「解析后的路径」与「真实路径（解软链后）」，防止符号链接逃逸。
+ */
+async function safePath(userPath: string): Promise<string> {
+  if (typeof userPath !== 'string' || userPath.trim() === '') {
+    throw new Error('路径必须是非空字符串');
+  }
+
   const resolved = resolve(WORKSPACE_ROOT, userPath);
-  const rel = relative(WORKSPACE_ROOT, resolved);
-  if (rel.startsWith('..') || rel.startsWith(`${sep}..`) || (process.platform === 'win32' && rel.includes(':'))) {
+  if (!isInside(WORKSPACE_ROOT, resolved)) {
     throw new Error(`路径 "${userPath}" 超出工作区范围`);
   }
-  return resolved;
+
+  const realRoot = await getRealWorkspaceRoot();
+  const real = await realpathSafe(resolved);
+  if (!isInside(realRoot, real)) {
+    throw new Error(`路径 "${userPath}" 超出工作区范围`);
+  }
+
+  return real;
 }
 
 /* ==================== read_file ==================== */
@@ -50,7 +84,7 @@ const readFileTool: Tool = {
     },
   },
   async execute(args) {
-    const filePath = safePath(args.file_path as string);
+    const filePath = await safePath(args.file_path as string);
     const content = await readFile(filePath, 'utf8');
     const lines = content.split('\n');
     const offset = typeof args.offset === 'number' ? args.offset : 0;
@@ -79,7 +113,7 @@ const writeFileTool: Tool = {
     },
   },
   async execute(args) {
-    const filePath = safePath(args.file_path as string);
+    const filePath = await safePath(args.file_path as string);
     const content = args.content as string;
     await writeFile(filePath, content, 'utf8');
     return `文件已写入：${filePath}（${content.length} 字符）`;
@@ -108,7 +142,7 @@ const editFileTool: Tool = {
     },
   },
   async execute(args) {
-    const filePath = safePath(args.file_path as string);
+    const filePath = await safePath(args.file_path as string);
     const oldStr = args.old_string as string;
     const newStr = args.new_string as string;
     const replaceAll = args.replace_all === true;
@@ -150,10 +184,10 @@ const globTool: Tool = {
   },
   async execute(args) {
     const pattern = args.pattern as string;
-    const baseDir = typeof args.path === 'string' ? safePath(args.path as string) : WORKSPACE_ROOT;
+    const baseDir = typeof args.path === 'string' ? await safePath(args.path as string) : await getRealWorkspaceRoot();
     const files: string[] = [];
     for await (const entry of glob(pattern, { cwd: baseDir, exclude: (d) => d.includes('node_modules') })) {
-      files.push(typeof entry === 'string' ? entry : entry.path);
+      files.push(entry);
     }
     return files.length > 0 ? files.join('\n') : '未找到匹配的文件';
   },
@@ -183,7 +217,7 @@ const grepTool: Tool = {
   async execute(args) {
     const pattern = args.pattern as string;
     const fileGlob = typeof args.glob === 'string' ? args.glob : '**/*';
-    const baseDir = typeof args.path === 'string' ? safePath(args.path as string) : WORKSPACE_ROOT;
+    const baseDir = typeof args.path === 'string' ? await safePath(args.path as string) : await getRealWorkspaceRoot();
     const maxResults = typeof args.limit === 'number' ? args.limit : 50;
 
     const results: string[] = [];
@@ -191,7 +225,7 @@ const grepTool: Tool = {
 
     for await (const entry of glob(fileGlob, { cwd: baseDir, exclude: (d) => d.includes('node_modules') })) {
       if (count >= maxResults) break;
-      const relativePath = typeof entry === 'string' ? entry : entry.path;
+      const relativePath = entry;
       const fullPath = resolve(baseDir, relativePath);
       const content = await readFile(fullPath, 'utf8');
       const lines = content.split('\n');
